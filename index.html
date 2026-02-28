@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="lt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mūrinio namo statybos</title>
+  <style>
+    :root { --c:#e8eefc; --m:rgba(255,255,255,.12); --m2:rgba(255,255,255,.08); }
+    *{ box-sizing:border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    body{ margin:0; background:#0b1118; color:var(--c); }
+    header{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--m2); background:#0e1620; position:sticky; top:0; z-index:10; }
+    h1{ font-size:16px; margin:0; letter-spacing:.2px; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button, select, input, textarea{ background:rgba(255,255,255,.06); border:1px solid var(--m); color:var(--c); border-radius:12px; padding:10px 12px; }
+    button{ cursor:pointer; }
+    main{ padding:16px; display:grid; grid-template-columns: 1fr; gap:14px; max-width:1180px; margin:0 auto; }
+    .tabs{ display:flex; gap:8px; flex-wrap:wrap; }
+    .tab{ padding:10px 12px; border:1px solid var(--m2); border-radius:999px; background:rgba(255,255,255,.04); cursor:pointer; }
+    .tab.active{ border-color:rgba(255,255,255,.24); background:rgba(120,170,255,.12); }
+    .card{ border:1px solid var(--m2); border-radius:18px; background:rgba(255,255,255,.03); box-shadow:0 14px 30px rgba(0,0,0,.22); padding:14px; }
+    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; }
+    @media (max-width: 980px){ .grid2,.grid3{ grid-template-columns:1fr; } }
+    table{ width:100%; border-collapse:collapse; overflow:hidden; border-radius:14px; border:1px solid var(--m2); }
+    th, td{ padding:10px; border-bottom:1px solid var(--m2); vertical-align:top; font-size:12px; }
+    th{ text-align:left; opacity:.9; background:rgba(255,255,255,.04); position:sticky; top:0; }
+    tr:last-child td{ border-bottom:none; }
+    .pill{ display:inline-block; padding:4px 8px; border:1px solid var(--m2); border-radius:999px; font-size:11px; opacity:.95; }
+    .ok{ background:rgba(40,200,120,.12); border-color:rgba(40,200,120,.25); }
+    .warn{ background:rgba(255,180,60,.12); border-color:rgba(255,180,60,.25); }
+    .bad{ background:rgba(255,90,90,.12); border-color:rgba(255,90,90,.25); }
+    .muted{ opacity:.75; }
+    .right{ text-align:right; }
+    .tiny{ font-size:11px; opacity:.75; }
+    .danger{ border-color:rgba(255,90,90,.25); background:rgba(255,90,90,.10); }
+    .nowrap{ white-space:nowrap; }
+
+    /* Gantt */
+    .ganttWrap{ overflow:auto; border:1px solid var(--m2); border-radius:16px; }
+    .gantt{ min-width: 980px; }
+    .ganttTop{ display:grid; grid-template-columns: 360px 1fr; border-bottom:1px solid var(--m2); background:rgba(255,255,255,.03); position:sticky; top:0; z-index:2; }
+    .ganttLeftHead{ padding:10px; border-right:1px solid var(--m2); }
+    .ganttRightHead{ padding:10px; }
+    .months{ display:flex; gap:10px; flex-wrap:wrap; font-size:12px; opacity:.9; }
+    .ganttRow{ display:grid; grid-template-columns: 360px 1fr; border-bottom:1px solid var(--m2); }
+    .ganttLeft{ padding:10px; border-right:1px solid var(--m2); }
+    .ganttRight{ position:relative; height:44px; }
+    .barPlanned{
+      position:absolute; top:10px; height:10px; border-radius:999px;
+      background: rgba(120,170,255,.35); border:1px solid rgba(120,170,255,.55);
+    }
+    .barActual{
+      position:absolute; top:24px; height:10px; border-radius:999px;
+      background: rgba(40,200,120,.25); border:1px solid rgba(40,200,120,.45);
+    }
+    .todayLine{
+      position:absolute; top:0; bottom:0; width:2px;
+      background: rgba(255,90,90,.85);
+    }
+    .gridLine{
+      position:absolute; top:0; bottom:0; width:1px;
+      background: rgba(255,255,255,.06);
+    }
+    .stageTag{ font-size:11px; opacity:.85; }
+    .taskTitle{ font-weight:800; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🏠 Mūrinio namo statybų valdymas</h1>
+    <div class="tiny">Apžvalga • Grafikas (Gantt) • Darbai • Biudžetas (planuojama vs faktinė) • Medžiagos</div>
+  </div>
+  <div class="row">
+    <button id="btnExport">Eksportas (JSON)</button>
+    <button id="btnImport">Importas</button>
+    <button id="btnReset" class="danger">Naujas projektas</button>
+  </div>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">Apžvalga</div>
+    <div class="tab" data-tab="gantt">Grafikas</div>
+    <div class="tab" data-tab="tasks">Darbai</div>
+    <div class="tab" data-tab="budget">Biudžetas</div>
+    <div class="tab" data-tab="materials">Medžiagos</div>
+  </div>
+
+  <section id="tab-overview" class="card"></section>
+  <section id="tab-gantt" class="card" style="display:none;"></section>
+  <section id="tab-tasks" class="card" style="display:none;"></section>
+  <section id="tab-budget" class="card" style="display:none;"></section>
+  <section id="tab-materials" class="card" style="display:none;"></section>
+</main>
+
+<script>
+  // ---------- Storage ----------
+  const KEY = "murinis_house_build_app_v2";
+  const money = (n) => (Number(n || 0)).toFixed(2) + " €";
+  const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
+
+  const todayISO = () => new Date().toISOString().slice(0,10);
+  const addDays = (iso, days) => {
+    const d = iso ? new Date(iso+"T00:00:00") : new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0,10);
+  };
+
+  const defaultState = {
+    project: { name: "Mūrinio namo statyba", start: todayISO() },
+    tasks: [
+      // Mūrinis (tipinė seka)
+      { id: uid(), stage:"Sklypas/leidimai", title:"Topografinė nuotrauka + geodezija", planStart: todayISO(), planEnd: addDays(todayISO(), 7), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Projektavimas", title:"Techninis projektas + konstrukcijos", planStart: addDays(todayISO(), 3), planEnd: addDays(todayISO(), 35), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Pamatai", title:"Kasimas, klojiniai, armavimas, betonavimas", planStart: addDays(todayISO(), 20), planEnd: addDays(todayISO(), 40), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Mūras", title:"Išorės sienų mūras", planStart: addDays(todayISO(), 41), planEnd: addDays(todayISO(), 65), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Perdangos", title:"Perdanga / sąramos / monolitai (jei yra)", planStart: addDays(todayISO(), 60), planEnd: addDays(todayISO(), 75), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Stogas", title:"Santvaros/konstrukcija + danga", planStart: addDays(todayISO(), 70), planEnd: addDays(todayISO(), 95), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Langai/durys", title:"Langų ir lauko durų montavimas", planStart: addDays(todayISO(), 90), planEnd: addDays(todayISO(), 100), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Inžinerija", title:"Elektra + vandentiekis/nuotekos (juodai)", planStart: addDays(todayISO(), 100), planEnd: addDays(todayISO(), 130), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Šildymas", title:"Grindinis šildymas + katilinė/šilumos siurblys", planStart: addDays(todayISO(), 120), planEnd: addDays(todayISO(), 145), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Apdaila", title:"Tinkavimas / gipso darbai", planStart: addDays(todayISO(), 135), planEnd: addDays(todayISO(), 170), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Apdaila", title:"Grindys, dažymas, plytelės", planStart: addDays(todayISO(), 165), planEnd: addDays(todayISO(), 210), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+      { id: uid(), stage:"Gerbūvis", title:"Trinkelės, terasa, tvora (jei planuoji)", planStart: addDays(todayISO(), 190), planEnd: addDays(todayISO(), 240), actStart:"", actEnd:"", owner:"", status:"todo", notes:"" },
+    ],
+    // Biudžetas: planuojama vs faktinė
+    budget: [
+      { id: uid(), cat:"Projektavimas", item:"Architektas/konstruktorius", planned: 3000, actual: 0, date:"", vendor:"", notes:"" },
+      { id: uid(), cat:"Pamatai", item:"Betonas + armatūra", planned: 7000, actual: 0, date:"", vendor:"", notes:"" },
+      { id: uid(), cat:"Mūras", item:"Blokeliai + skiediniai", planned: 12000, actual: 0, date:"", vendor:"", notes:"" },
+      { id: uid(), cat:"Stogas", item:"Konstrukcija + danga", planned: 14000, actual: 0, date:"", vendor:"", notes:"" },
+    ],
+    materials: [
+      { id: uid(), name:"Armatūra", qty: 1200, unit:"kg", price: 0.95, bought:false, vendor:"", notes:"Pamatai" },
+      { id: uid(), name:"Mūro blokeliai", qty: 1, unit:"komplektas", price: 12000, bought:false, vendor:"", notes:"Išorės sienos" },
+      { id: uid(), name:"Stogo danga", qty: 1, unit:"komplektas", price: 14000, bought:false, vendor:"", notes:"Su skardiniais elementais" },
+    ],
+    gantt: { zoomDays: 210 } // kiek dienų rodyti nuo starto
+  };
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return structuredClone(defaultState);
+      const parsed = JSON.parse(raw);
+      return { ...structuredClone(defaultState), ...parsed };
+    } catch {
+      return structuredClone(defaultState);
+    }
+  }
+  function save() { localStorage.setItem(KEY, JSON.stringify(state)); renderAll(); }
+  let state = load();
+
+  // ---------- Tabs ----------
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      const name = t.dataset.tab;
+      ["overview","gantt","tasks","budget","materials"].forEach(k => {
+        document.getElementById("tab-" + k).style.display = (k === name) ? "block" : "none";
+      });
+      renderAll();
+    });
+  });
+
+  // ---------- Overview ----------
+  function computeOverview() {
+    const totalTasks = state.tasks.length;
+    const doneTasks = state.tasks.filter(t => t.status === "done").length;
+    const doingTasks = state.tasks.filter(t => t.status === "doing").length;
+
+    const plannedBudget = state.budget.reduce((s, e) => s + Number(e.planned || 0), 0);
+    const actualBudget = state.budget.reduce((s, e) => s + Number(e.actual || 0), 0);
+    const variance = actualBudget - plannedBudget;
+
+    const byCat = {};
+    for (const e of state.budget) {
+      const p = Number(e.planned||0), a = Number(e.actual||0);
+      byCat[e.cat] = byCat[e.cat] || { planned:0, actual:0 };
+      byCat[e.cat].planned += p; byCat[e.cat].actual += a;
+    }
+
+    const matNeed = state.materials.filter(m => !m.bought).length;
+    const matPlanned = state.materials.reduce((s, m) => s + Number(m.qty||0)*Number(m.price||0), 0);
+    const matBought = state.materials.filter(m => m.bought).reduce((s, m) => s + Number(m.qty||0)*Number(m.price||0), 0);
+
+    // artimiausias terminas (planuojamas)
+    const upcoming = state.tasks
+      .filter(t => t.status !== "done" && t.planEnd)
+      .map(t => ({...t, d: new Date(t.planEnd+"T00:00:00").getTime()}))
+      .sort((a,b)=>a.d-b.d)[0] || null;
+
+    return { totalTasks, doneTasks, doingTasks, plannedBudget, actualBudget, variance, byCat, matNeed, matPlanned, matBought, upcoming };
+  }
+
+  function renderOverview() {
+    const o = computeOverview();
+    const el = document.getElementById("tab-overview");
+
+    const cats = Object.entries(o.byCat)
+      .map(([k,v]) => ({ cat:k, planned:v.planned, actual:v.actual, diff:v.actual - v.planned }))
+      .sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff))
+      .slice(0,8);
+
+    const varClass = o.variance > 0 ? "bad" : (o.variance < 0 ? "ok" : "");
+    const varLabel = o.variance > 0 ? "Virš plano" : (o.variance < 0 ? "Žemiau plano" : "Pagal planą");
+
+    el.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:flex-end;">
+        <div>
+          <div class="muted tiny">Projektas</div>
+          <div style="font-size:18px; font-weight:800;">${escapeHtml(state.project.name)}</div>
+          <div class="tiny muted">Pradžia: ${escapeHtml(state.project.start || "")}</div>
+          ${o.upcoming ? `<div class="tiny" style="margin-top:6px;">
+            <span class="pill warn">Artimiausias: ${escapeHtml(o.upcoming.title)} (iki ${escapeHtml(o.upcoming.planEnd)})</span>
+          </div>` : `<div class="tiny muted" style="margin-top:6px;">Nėra suplanuotų terminų.</div>`}
+        </div>
+        <div class="row">
+          <input id="projName" placeholder="Projekto pavadinimas" value="${escapeAttr(state.project.name)}" />
+          <input id="projStart" type="date" value="${escapeAttr(state.project.start)}" />
+          <button id="btnProjSave">Išsaugoti</button>
+        </div>
+      </div>
+
+      <div class="grid3" style="margin-top:14px;">
+        <div class="card" style="padding:14px;">
+          <div class="muted tiny">Darbų progresas</div>
+          <div style="font-size:22px; font-weight:900; margin-top:6px;">
+            ${o.doneTasks}/${o.totalTasks}
+            <span class="tiny muted">užbaigta</span>
+          </div>
+          <div class="tiny muted">Vykdoma: ${o.doingTasks}</div>
+        </div>
+
+        <div class="card" style="padding:14px;">
+          <div class="muted tiny">Biudžetas</div>
+          <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="pill">Planuojama: <b>${money(o.plannedBudget)}</b></span>
+            <span class="pill">Faktinė: <b>${money(o.actualBudget)}</b></span>
+            <span class="pill ${varClass}">${varLabel}: <b>${money(o.variance)}</b></span>
+          </div>
+          <div class="tiny muted" style="margin-top:8px;">Didžiausi nukrypimai (kategorijos):</div>
+          <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+            ${cats.map(x => {
+              const cls = x.diff > 0 ? "bad" : (x.diff < 0 ? "ok" : "");
+              return `<span class="pill ${cls}">${escapeHtml(x.cat)}: ${money(x.diff)}</span>`;
+            }).join("") || `<span class="tiny muted">Nėra</span>`}
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;">
+          <div class="muted tiny">Medžiagos</div>
+          <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="pill warn">Reikia nupirkti: <b>${o.matNeed}</b></span>
+            <span class="pill">Planuojama suma: <b>${money(o.matPlanned)}</b></span>
+            <span class="pill ok">Nupirkta suma: <b>${money(o.matBought)}</b></span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("btnProjSave").onclick = () => {
+      state.project.name = document.getElementById("projName").value.trim() || "Mūrinio namo statyba";
+      state.project.start = document.getElementById("projStart").value || "";
+      save();
+    };
+  }
+
+  // ---------- Tasks ----------
+  function statusSelect(id, value) {
+    const opts = [
+      ["todo","Planuojama"],
+      ["doing","Vykdoma"],
+      ["done","Užbaigta"]
+    ];
+    return `
+      <select data-kind="taskStatus" data-id="${id}">
+        ${opts.map(([v,label]) => `<option value="${v}" ${v===value?"selected":""}>${label}</option>`).join("")}
+      </select>
+    `;
+  }
+
+  function renderTasks() {
+    const el = document.getElementById("tab-tasks");
+    const stages = [...new Set(state.tasks.map(t=>t.stage))].sort();
+
+    el.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:900;">Darbai</div>
+          <div class="tiny muted">Planuojamos ir faktinės datos (patogu vėlavimams)</div>
+        </div>
+        <button id="btnAddTask">+ Pridėti darbą</button>
+      </div>
+
+      <div class="grid3" style="margin-top:14px;">
+        <div>
+          <div class="tiny muted">Filtras pagal etapą</div>
+          <select id="taskStageFilter" style="width:100%; margin-top:6px;">
+            <option value="">Visi</option>
+            ${stages.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <div class="tiny muted">Paieška</div>
+          <input id="taskSearch" placeholder="pvz. pamatai, mūras, stogas..." style="width:100%; margin-top:6px;" />
+        </div>
+        <div>
+          <div class="tiny muted">Greitas veiksmas</div>
+          <button id="btnOpenGantt" style="width:100%; margin-top:6px;">Atidaryti grafiką</button>
+        </div>
+      </div>
+
+      <div style="margin-top:14px; overflow:auto; max-height:62vh;">
+        <table>
+          <thead>
+            <tr>
+              <th>Etapas</th><th>Darbas</th>
+              <th class="nowrap">Plan start</th><th class="nowrap">Plan end</th>
+              <th class="nowrap">Fakt start</th><th class="nowrap">Fakt end</th>
+              <th>Atsakingas</th><th>Statusas</th><th class="right">Veiksmai</th>
+            </tr>
+          </thead>
+          <tbody id="taskRows"></tbody>
+        </table>
+      </div>
+      <div class="tiny muted" style="margin-top:10px;">
+        Tip: „Fakt start“ užpildyk kai pradedi, „Fakt end“ — kai užbaigi. Gantt rodys planą ir faktą atskirai.
+      </div>
+    `;
+
+    const filterEl = document.getElementById("taskStageFilter");
+    const searchEl = document.getElementById("taskSearch");
+    const rowsEl = document.getElementById("taskRows");
+
+    function drawRows() {
+      const f = filterEl.value;
+      const q = (searchEl.value || "").toLowerCase().trim();
+
+      const list = state.tasks.filter(t => {
+        const okStage = !f || t.stage === f;
+        const blob = (t.stage + " " + t.title + " " + (t.owner||"") + " " + (t.notes||"")).toLowerCase();
+        const okQ = !q || blob.includes(q);
+        return okStage && okQ;
+      });
+
+      rowsEl.innerHTML = list.map(t => `
+        <tr>
+          <td><input data-k="stage" data-id="${t.id}" value="${escapeAttr(t.stage)}" /></td>
+          <td>
+            <input data-k="title" data-id="${t.id}" value="${escapeAttr(t.title)}" style="width:100%;" />
+            <div class="tiny muted">${escapeHtml(t.notes || "")}</div>
+          </td>
+          <td><input data-k="planStart" data-id="${t.id}" type="date" value="${escapeAttr(t.planStart || "")}" /></td>
+          <td><input data-k="planEnd" data-id="${t.id}" type="date" value="${escapeAttr(t.planEnd || "")}" /></td>
+          <td><input data-k="actStart" data-id="${t.id}" type="date" value="${escapeAttr(t.actStart || "")}" /></td>
+          <td><input data-k="actEnd" data-id="${t.id}" type="date" value="${escapeAttr(t.actEnd || "")}" /></td>
+          <td><input data-k="owner" data-id="${t.id}" value="${escapeAttr(t.owner || "")}" /></td>
+          <td>${statusSelect(t.id, t.status)}</td>
+          <td class="right">
+            <button data-act="note" data-id="${t.id}">Pastabos</button>
+            <button data-act="del" data-id="${t.id}" class="danger">Trinti</button>
+          </td>
+        </tr>
+      `).join("") || `<tr><td colspan="9" class="muted">Nėra darbų.</td></tr>`;
+
+      rowsEl.querySelectorAll("input[data-k]").forEach(inp => {
+        inp.addEventListener("change", () => {
+          const id = inp.dataset.id;
+          const k = inp.dataset.k;
+          const item = state.tasks.find(x => x.id === id);
+          if (!item) return;
+          item[k] = inp.value;
+          save();
+        });
+      });
+
+      rowsEl.querySelectorAll("select[data-kind='taskStatus']").forEach(sel => {
+        sel.addEventListener("change", () => {
+          const id = sel.dataset.id;
+          const item = state.tasks.find(x => x.id === id);
+          if (!item) return;
+          item.status = sel.value;
+          save();
+        });
+      });
+
+      rowsEl.querySelectorAll("button[data-act]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.id;
+          const act = btn.dataset.act;
+          const item = state.tasks.find(x => x.id === id);
+          if (!item) return;
+          if (act === "del") {
+            if (confirm("Trinti darbą?")) {
+              state.tasks = state.tasks.filter(x => x.id !== id);
+              save();
+            }
+          }
+          if (act === "note") {
+            const txt = prompt("Pastabos:", item.notes || "");
+            if (txt !== null) { item.notes = txt; save(); }
+          }
+        });
+      });
+    }
+
+    filterEl.onchange = drawRows;
+    searchEl.oninput = drawRows;
+
+    document.getElementById("btnAddTask").onclick = () => {
+      state.tasks.unshift({
+        id: uid(), stage:"", title:"",
+        planStart:"", planEnd:"", actStart:"", actEnd:"",
+        owner:"", status:"todo", notes:""
+      });
+      save();
+    };
+
+    document.getElementById("btnOpenGantt").onclick = () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      document.querySelector(`.tab[data-tab="gantt"]`).classList.add("active");
+      ["overview","gantt","tasks","budget","materials"].forEach(k => {
+        document.getElementById("tab-" + k).style.display = (k === "gantt") ? "block" : "none";
+      });
+      renderAll();
+    };
+
+    drawRows();
+  }
+
+  // ---------- Budget (planned vs actual) ----------
+  function renderBudget() {
+    const el = document.getElementById("tab-budget");
+    const cats = [...new Set(state.budget.map(b=>b.cat))].sort();
+
+    const plannedTotal = state.budget.reduce((s,e)=>s+Number(e.planned||0),0);
+    const actualTotal = state.budget.reduce((s,e)=>s+Number(e.actual||0),0);
+    const diffTotal = actualTotal - plannedTotal;
+
+    el.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:900;">Biudžetas (planuojama vs faktinė)</div>
+          <div class="tiny muted">
+            Planuojama: <b>${money(plannedTotal)}</b> • Faktinė: <b>${money(actualTotal)}</b> • Skirtumas:
+            <b class="${diffTotal>0?'bad':(diffTotal<0?'ok':'')}">${money(diffTotal)}</b>
+          </div>
+        </div>
+        <button id="btnAddExpense">+ Pridėti eilutę</button>
+      </div>
+
+      <div class="grid2" style="margin-top:14px;">
+        <div>
+          <div class="tiny muted">Filtras pagal kategoriją</div>
+          <select id="budCatFilter" style="width:100%; margin-top:6px;">
+            <option value="">Visos</option>
+            ${cats.map(c=>`<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <div class="tiny muted">Paieška</div>
+          <input id="budSearch" placeholder="pvz. betonas, sąskaita, tiekėjas..." style="width:100%; margin-top:6px;" />
+        </div>
+      </div>
+
+      <div style="margin-top:14px; overflow:auto; max-height:62vh;">
+        <table>
+          <thead>
+            <tr>
+              <th>Kategorija</th><th>Pavadinimas</th>
+              <th class="nowrap">Planuojama</th><th class="nowrap">Faktinė</th><th class="nowrap">Skirtumas</th>
+              <th>Data</th><th>Tiekėjas</th><th class="right">Veiksmai</th>
+            </tr>
+          </thead>
+          <tbody id="budRows"></tbody>
+        </table>
+      </div>
+      <div class="tiny muted" style="margin-top:10px;">
+        Tip: faktinę pildyk nuo sąskaitų/kvito. Skirtumas automatiškai paskaičiuojamas.
+      </div>
+    `;
+
+    const filterEl = document.getElementById("budCatFilter");
+    const searchEl = document.getElementById("budSearch");
+    const rowsEl = document.getElementById("budRows");
+
+    function drawRows() {
+      const f = filterEl.value;
+      const q = (searchEl.value||"").toLowerCase().trim();
+
+      const list = state.budget.filter(e => {
+        const okCat = !f || e.cat === f;
+        const blob = (e.cat+" "+e.item+" "+(e.vendor||"")+" "+(e.notes||"")).toLowerCase();
+        const okQ = !q || blob.includes(q);
+        return okCat && okQ;
+      });
+
+      rowsEl.innerHTML = list.map(e => {
+        const diff = Number(e.actual||0) - Number(e.planned||0);
+        const cls = diff > 0 ? "bad" : (diff < 0 ? "ok" : "");
+        return `
+          <tr>
+            <td><input data-k="cat" data-id="${e.id}" value="${escapeAttr(e.cat)}" /></td>
+            <td>
+              <input data-k="item" data-id="${e.id}" value="${escapeAttr(e.item)}" style="width:100%;" />
+              <div class="tiny muted">${escapeHtml(e.notes||"")}</div>
+            </td>
+            <td><input data-k="planned" data-id="${e.id}" type="number" step="0.01" value="${escapeAttr(e.planned)}" /></td>
+            <td><input data-k="actual" data-id="${e.id}" type="number" step="0.01" value="${escapeAttr(e.actual)}" /></td>
+            <td><span class="pill ${cls}">${money(diff)}</span></td>
+            <td><input data-k="date" data-id="${e.id}" type="date" value="${escapeAttr(e.date||"")}" /></td>
+            <td><input data-k="vendor" data-id="${e.id}" value="${escapeAttr(e.vendor||"")}" /></td>
+            <td class="right">
+              <button data-act="note" data-id="${e.id}">Pastabos</button>
+              <button data-act="del" data-id="${e.id}" class="danger">Trinti</button>
+            </td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="8" class="muted">Nėra biudžeto eilučių.</td></tr>`;
+
+      rowsEl.querySelectorAll("input[data-k]").forEach(inp => {
+        inp.addEventListener("change", () => {
+          const id = inp.dataset.id, k = inp.dataset.k;
+          const item = state.budget.find(x=>x.id===id);
+          if (!item) return;
+          if (k==="planned" || k==="actual") item[k] = Number(inp.value||0);
+          else item[k] = inp.value;
+          save();
+        });
+      });
+
+      rowsEl.querySelectorAll("button[data-act]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.id, act = btn.dataset.act;
+          const item = state.budget.find(x=>x.id===id);
+          if (!item) return;
+          if (act==="del") {
+            if (confirm("Trinti eilutę?")) {
+              state.budget = state.budget.filter(x=>x.id!==id);
+              save();
+            }
+          }
+          if (act==="note") {
+            const txt = prompt("Pastabos:", item.notes || "");
+            if (txt !== null) { item.notes = txt; save(); }
+          }
+        });
+      });
+    }
+
+    filterEl.onchange = drawRows;
+    searchEl.oninput = drawRows;
+
+    document.getElementById("btnAddExpense").onclick = () => {
+      state.budget.unshift({ id: uid(), cat:"", item:"", planned:0, actual:0, date:"", vendor:"", notes:"" });
+      save();
+    };
+
+    drawRows();
+  }
+
+  // ---------- Materials ----------
+  function renderMaterials() {
+    const el = document.getElementById("tab-materials");
+
+    el.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:900;">Medžiagos</div>
+          <div class="tiny muted">Kiekis × kaina = suma. Pažymėk „nupirkta“.</div>
+        </div>
+        <button id="btnAddMat">+ Pridėti medžiagą</button>
+      </div>
+
+      <div style="margin-top:14px; overflow:auto; max-height:62vh;">
+        <table>
+          <thead>
+            <tr>
+              <th>Pavadinimas</th><th>Kiekis</th><th>Vnt.</th><th>Kaina/vnt</th><th>Suma</th><th>Nupirkta</th><th>Tiekėjas</th><th class="right">Veiksmai</th>
+            </tr>
+          </thead>
+          <tbody id="matRows"></tbody>
+        </table>
+      </div>
+    `;
+
+    const rowsEl = document.getElementById("matRows");
+
+    rowsEl.innerHTML = state.materials.map(m => {
+      const sum = Number(m.qty||0) * Number(m.price||0);
+      return `
+        <tr>
+          <td>
+            <input data-k="name" data-id="${m.id}" value="${escapeAttr(m.name)}" style="width:100%;" />
+            <div class="tiny muted">${escapeHtml(m.notes||"")}</div>
+          </td>
+          <td><input data-k="qty" data-id="${m.id}" type="number" step="0.01" value="${escapeAttr(m.qty)}" /></td>
+          <td><input data-k="unit" data-id="${m.id}" value="${escapeAttr(m.unit)}" style="width:70px;" /></td>
+          <td><input data-k="price" data-id="${m.id}" type="number" step="0.01" value="${escapeAttr(m.price)}" /></td>
+          <td><span class="pill">${money(sum)}</span></td>
+          <td class="right">
+            <input data-k="bought" data-id="${m.id}" type="checkbox" ${m.bought ? "checked":""} />
+          </td>
+          <td><input data-k="vendor" data-id="${m.id}" value="${escapeAttr(m.vendor||"")}" /></td>
+          <td class="right">
+            <button data-act="note" data-id="${m.id}">Pastabos</button>
+            <button data-act="del" data-id="${m.id}" class="danger">Trinti</button>
+          </td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="8" class="muted">Nėra medžiagų.</td></tr>`;
+
+    rowsEl.querySelectorAll("input[data-k]").forEach(inp => {
+      inp.addEventListener("change", () => {
+        const id = inp.dataset.id, k = inp.dataset.k;
+        const item = state.materials.find(x=>x.id===id);
+        if (!item) return;
+        if (k==="bought") item.bought = inp.checked;
+        else if (k==="qty" || k==="price") item[k] = Number(inp.value||0);
+        else item[k] = inp.value;
+        save();
+      });
+    });
+
+    rowsEl.querySelectorAll("button[data-act]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id, act = btn.dataset.act;
+        const item = state.materials.find(x=>x.id===id);
+        if (!item) return;
+        if (act==="del") {
+          if (confirm("Trinti medžiagą?")) {
+            state.materials = state.materials.filter(x=>x.id!==id);
+            save();
+          }
+        }
+        if (act==="note") {
+          const txt = prompt("Pastabos:", item.notes || "");
+          if (txt !== null) { item.notes = txt; save(); }
+        }
+      });
+    });
+
+    document.getElementById("btnAddMat").onclick = () => {
+      state.materials.unshift({ id: uid(), name:"", qty:0, unit:"vnt", price:0, bought:false, vendor:"", notes:"" });
+      save();
+    };
+  }
+
+  // ---------- Gantt ----------
+  function dateToX(iso, startISO, totalDays, widthPx) {
+    if (!iso) return null;
+    const t0 = new Date(startISO+"T00:00:00").getTime();
+    const t = new Date(iso+"T00:00:00").getTime();
+    const days = Math.round((t - t0) / 86400000);
+    return Math.max(0, Math.min(widthPx, (days / totalDays) * widthPx));
+  }
+
+  function renderGantt() {
+    const el = document.getElementById("tab-gantt");
+
+    const projectStart = state.project.start || todayISO();
+    const totalDays = Number(state.gantt.zoomDays || 210);
+
+    // nustatom planinį horizontą: nuo projekto starto iki (start + totalDays)
+    const horizonEnd = addDays(projectStart, totalDays);
+
+    // parenkam tasks tvarką pagal plan start
+    const tasks = [...state.tasks].sort((a,b) => (a.planStart||"").localeCompare(b.planStart||""));
+
+    el.innerHTML = `
+      <div class="row" style="justify-content:space-between; align-items:flex-end;">
+        <div>
+          <div style="font-size:16px; font-weight:900;">Grafikas (Gantt)</div>
+          <div class="tiny muted">Mėlyna – planas, žalia – faktas. Raudona linija – šiandien.</div>
+        </div>
+        <div class="row">
+          <div class="tiny muted">Horizontas (dienomis)</div>
+          <input id="zoomDays" type="number" min="30" step="15" value="${escapeAttr(totalDays)}" style="width:120px;" />
+          <button id="btnZoomSave">Taikyti</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <span class="pill">Start: <b>${escapeHtml(projectStart)}</b></span>
+        <span class="pill">End: <b>${escapeHtml(horizonEnd)}</b></span>
+      </div>
+
+      <div class="ganttWrap" style="margin-top:14px;">
+        <div class="gantt" id="gantt"></div>
+      </div>
+      <div class="tiny muted" style="margin-top:10px;">
+        Patarimas: jei faktinės datos tuščios, pradžiai užtenka suvesti tik planą. Faktą pildyk eigoje.
+      </div>
+    `;
+
+    document.getElementById("btnZoomSave").onclick = () => {
+      const v = Number(document.getElementById("zoomDays").value || 210);
+      state.gantt.zoomDays = Math.max(30, Math.min(720, v));
+      save();
+    };
+
+    const gantt = document.getElementById("gantt");
+    const rightWidth = 900; // vidinis plotis (px) – pritaikytas min-width; scrollina wrap'as
+
+    // header
+    const monthsLabel = buildMonths(projectStart, totalDays);
+    gantt.innerHTML = `
+      <div class="ganttTop">
+        <div class="ganttLeftHead">
+          <div class="tiny muted">Etapas / darbas</div>
+        </div>
+        <div class="ganttRightHead">
+          <div class="months">${monthsLabel}</div>
+        </div>
+      </div>
+    `;
+
+    // today line pos
+    const todayX = dateToX(todayISO(), projectStart, totalDays, rightWidth);
+
+    // gridlines kas 14 d.
+    const gridEvery = 14;
+    const gridLines = [];
+    for (let d=0; d<=totalDays; d+=gridEvery) {
+      const x = (d/totalDays)*rightWidth;
+      gridLines.push(`<div class="gridLine" style="left:${x}px"></div>`);
+    }
+
+    // rows
+    for (const t of tasks) {
+      const p1 = dateToX(t.planStart, projectStart, totalDays, rightWidth);
+      const p2 = dateToX(t.planEnd, projectStart, totalDays, rightWidth);
+      const a1 = dateToX(t.actStart, projectStart, totalDays, rightWidth);
+      const a2 = dateToX(t.actEnd, projectStart, totalDays, rightWidth);
+
+      const plannedBar = (p1!=null && p2!=null && p2>=p1)
+        ? `<div class="barPlanned" style="left:${p1}px; width:${Math.max(6, p2-p1)}px"></div>`
+        : "";
+
+      const actualBar = (a1!=null && a2!=null && a2>=a1)
+        ? `<div class="barActual" style="left:${a1}px; width:${Math.max(6, a2-a1)}px"></div>`
+        : "";
+
+      const statusPill = t.status==="done" ? "ok" : (t.status==="doing" ? "warn" : "");
+      const left = `
+        <div class="ganttLeft">
+          <div class="stageTag muted">${escapeHtml(t.stage||"")}</div>
+          <div class="taskTitle">${escapeHtml(t.title||"")}</div>
+          <div class="tiny muted">
+            Plan: ${escapeHtml(t.planStart||"—")} → ${escapeHtml(t.planEnd||"—")}<br>
+            Fakt: ${escapeHtml(t.actStart||"—")} → ${escapeHtml(t.actEnd||"—")}
+            <span class="pill ${statusPill}" style="margin-left:6px;">${t.status==="done"?"Užbaigta":(t.status==="doing"?"Vykdoma":"Planuojama")}</span>
+          </div>
+        </div>
+      `;
+
+      const right = `
+        <div class="ganttRight" style="width:${rightWidth}px;">
+          ${gridLines.join("")}
+          ${todayX!=null ? `<div class="todayLine" style="left:${todayX}px"></div>` : ""}
+          ${plannedBar}
+          ${actualBar}
+        </div>
+      `;
+
+      gantt.insertAdjacentHTML("beforeend", `<div class="ganttRow">${left}${right}</div>`);
+    }
+  }
+
+  function buildMonths(startISO, totalDays) {
+    const start = new Date(startISO+"T00:00:00");
+    const end = new Date(addDays(startISO, totalDays)+"T00:00:00");
+    const parts = [];
+    const d = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (d <= end) {
+      const m = d.toLocaleString("lt-LT", { month:"short" });
+      const y = d.getFullYear();
+      parts.push(`<span class="pill">${m} ${y}</span>`);
+      d.setMonth(d.getMonth()+1);
+    }
+    return parts.join("");
+  }
+
+  // ---------- Import / Export / Reset ----------
+  document.getElementById("btnExport").onclick = () => {
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "murinis-statybos.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  document.getElementById("btnImport").onclick = async () => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "application/json";
+    inp.onchange = async () => {
+      const file = inp.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const parsed = JSON.parse(text);
+        state = { ...structuredClone(defaultState), ...parsed };
+        save();
+        alert("Importuota!");
+      } catch {
+        alert("Nepavyko importuoti (blogas JSON).");
+      }
+    };
+    inp.click();
+  };
+
+  document.getElementById("btnReset").onclick = () => {
+    if (!confirm("Tikrai pradėti naują projektą? Visi duomenys bus ištrinti šiame įrenginyje.")) return;
+    state = structuredClone(defaultState);
+    save();
+  };
+
+  // ---------- Helpers ----------
+  function escapeHtml(s){ return String(s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+  function escapeAttr(s){ return escapeHtml(s).replaceAll('"',"&quot;"); }
+
+  function renderAll(){
+    renderOverview();
+    renderGantt();
+    renderTasks();
+    renderBudget();
+    renderMaterials();
+  }
+  renderAll();
+</script>
+</body>
+</html>
